@@ -6,7 +6,10 @@
     "d3": "^5.0.1",
     "react": "^16.3.2",
     "react-dom": "^16.3.2",
-    "react-scripts": "1.1.4"
+    "react-responsive": "^4.1.0",
+    "react-scripts": "1.1.4",
+    "topojson": "^3.0.2",
+    "versor": "^0.0.3"
   },
   "scripts": {
     "start": "react-scripts start",

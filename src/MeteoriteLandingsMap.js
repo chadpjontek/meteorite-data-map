@@ -3,14 +3,80 @@ import * as d3 from "d3";
 import * as topojson from "topojson"
 import versor from 'versor'
 import './App.css';
+import idb from 'idb'
 
 class MeteoriteLandingsMap extends Component {
+
   componentDidMount() {
-    this.makeGraph();
+    if (!window.indexedDB) {
+      (async () => {
+        const [geoData, meteoriteData] = await this.getData();
+        this.drawMap(geoData, meteoriteData)
+      })()
+    } else {
+      (async () => {
+        let [geoData, meteoriteData] = await this.getDBData();
+        if (geoData[0] === undefined || meteoriteData[0] === undefined) {
+          this.addDBData()
+          console.log("missing data")
+        }
+        this.drawMap(geoData[0], meteoriteData[0])
+      })()
+    }
   }
 
-  makeGraph = async () => {
-    // We need to fetch the data async for best speed before drawing the map
+  getDBData = async () => {
+    // check first to see if the database already exists
+    const dbPromise = idb.open('mapDB', 1, upgradeDB => {
+      upgradeDB.createObjectStore('geo')
+      upgradeDB.createObjectStore('meteorite')
+    })
+    const geoPromise = dbPromise.then(db => {
+      return db.transaction('geo')
+        .objectStore('geo').getAll()
+    })
+    const meteoritePromise = dbPromise.then(db => {
+      return db.transaction('meteorite')
+        .objectStore('meteorite').getAll()
+    })
+    const [geoData, meteoriteData] = await Promise.all([geoPromise, meteoritePromise]);
+    return [geoData, meteoriteData]
+  }
+
+  addDBData = async () => {
+    const [geoData, meteoriteData] = await this.getData();
+    const dbPromise = idb.open('mapDB', 1, upgradeDB => {
+      upgradeDB.createObjectStore('geo')
+      upgradeDB.createObjectStore('meteorite')
+    })
+    dbPromise.then(db => {
+      const tx = db.transaction('geo', 'readwrite')
+      const geoStore = tx.objectStore('geo')
+      geoStore.put(geoData, "geoData")
+      return tx.complete
+    })
+    dbPromise.then(db => {
+      const tx = db.transaction('meteorite', 'readwrite')
+      const meteoriteStore = tx.objectStore('meteorite')
+      meteoriteStore.put(meteoriteData, "meteoriteData")
+      return tx.complete
+    })
+  }
+
+  getData = async () => {
+    // response status
+    function status(response) {
+      if (response.status >= 200 && response.status < 300) {
+        return Promise.resolve(response);
+      } else {
+        return Promise.reject(new Error(response.statusText));
+      }
+    };
+    // json response
+    function json(response) {
+      return response.json();
+    };
+    // create promises for the data sets to return
     const geoPromise = fetch("https://unpkg.com/world-atlas@1/world/110m.json")
       .then(status)
       .then(json)
@@ -20,22 +86,9 @@ class MeteoriteLandingsMap extends Component {
       .then(json)
       .then(data => data);
     const [geoData, meteoriteData] = await Promise.all([geoPromise, meteoritePromise]);
-    this.drawMap(geoData, meteoriteData)
-
-    // response status
-    function status(response) {
-      if (response.status >= 200 && response.status < 300) {
-        return Promise.resolve(response);
-      } else {
-        return Promise.reject(new Error(response.statusText));
-      }
-    };
-
-    // json response
-    function json(response) {
-      return response.json();
-    };
+    return [geoData, meteoriteData]
   }
+
   // map function
   drawMap = (world, meteoriteData) => {
     const defaultRadius = 0.75, container = document.createElement("container");
